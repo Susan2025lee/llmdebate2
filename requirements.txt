@@ -1,0 +1,7 @@
+openai
+python-dotenv
+typer[all]
+rich
+pytest
+google-generativeai
+pytest-asyncio 

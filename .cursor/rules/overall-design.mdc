@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- when we proceed on the project. please always remember to look at [implementation_plan.md](mdc:implementation_plan.md) [prd.md](mdc:prd.md) and [file_structure.md](mdc:file_structure.md)
+
+- we will develop our system based on following the [task_list.md](mdc:task_list.md). after finishing each step, we will update [task_list.md](mdc:task_list.md)
+

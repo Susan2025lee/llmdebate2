@@ -1,0 +1,21 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- **IMPORTANT**: All access to LLMs must use the `LLMInterface` (`src/core/llm_interface.py`). This component handles the proxy configuration needed to access OpenAI behind the firewall. Do not make direct calls to OpenAI's API elsewhere in the codebase.
+
+- When implementing new features that require LLM access:
+  - Import the `LLMInterface` class: `from src.core.llm_interface import LLMInterface`
+  - Create an instance with proper model configuration: `llm = LLMInterface(model_key="gpt-o4-mini")`
+  - Use the core communication methods `generate_response()` or `generate_chat_response()`
+  
+- The `LLMInterface` handles ONLY communication with the LLM. Domain-specific functionality (like report evaluation) should be implemented in separate components that use the `LLMInterface` for communication.
+
+- **Model-specific adaptations**: The `LLMInterface` automatically handles model-specific limitations:
+  - **System role support**: For models like gpt-o4-mini that don't support system roles, system messages are automatically converted to user messages with a special format.
+  - **Temperature settings**: Some models (like gpt-o4-mini) only support the default temperature of 1.0. The interface automatically omits temperature settings for these models.
+  - You can use the same API patterns with all models - the interface will handle the necessary adaptations internally.
