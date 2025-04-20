@@ -23,12 +23,10 @@
 - [x] Write unit tests for convergence detection logic (covered by debate loop tests)
 
 ## Milestone 3: Merge & Summarize
-- [x] Code merge logic (endorsement + confidence) - *Initial version*
-- [ ] Enhance merge logic with semantic clustering (using `sentence-transformers`)
+- [x] Code merge logic (endorsement + confidence) - *Initial basic version*
 - [x] Create summarization prompt and integration (in core/summarizer.py)
 - [x] Test final summarization (Via smoke test)
-- [x] Write unit tests for merge logic calculations - *Covers initial version*
-- [ ] Write unit tests for semantic merge logic
+- [x] Write unit tests for basic merge logic calculations
 - [x] Write unit tests for summarization prompt assembly (in tests/test_summarizer.py)
 
 ## Milestone 4: Judge Agent Integration
@@ -59,7 +57,7 @@
 - [ ] Implement Factor Merging Logic (`core/merge_logic.py`)
 - [ ] Implement Final Summarization (`core/summarizer.py`)
 
-## Version 2: Critique Prose Baseline (In Progress)
+## Version 2: Critique Prose Baseline (Foundation for V3)
 
 - [x] Create `debate_v2.py` (copy from `debate.py`)
 - [x] Add new prompt templates to `utils/prompts.py` (`PROSE_BASELINE_GENERATION_TEMPLATE`, `CRITIQUE_PROSE_BASELINE_TEMPLATE`)
@@ -71,4 +69,25 @@
 - [ ] Verify/adjust debate loop logic in `core/debate_engine.py` if needed (e.g., round numbering) - *Deferred pending testing*
 - [x] Update judge integration in `debate_v2.py` (prose vs. prose comparison, fallback logic)
 - [ ] Add/update unit tests for `debate_v2.py` flow
-- [ ] Perform manual testing with rich prompts 
+- [x] Enhance Factor Merging Logic (`core/merge_logic.py`):
+    - [x] Refactor `merge_factors` to use LLM for high-quality synthesis
+    - [x] Make `merge_factors` async
+    - [x] Design/implement prompt for LLM-based merging (grouping, synthesis, ranking)
+    - [x] Implement LLM call via `LLMInterface`
+    - [x] Implement robust JSON parsing for LLM output
+    - [ ] Write unit tests for LLM-based merge logic (mocking LLM call, testing parsing)
+- [x] Perform manual testing with rich prompts
+
+## Version 3: Integrated Refinement (Planned)
+
+- [x] Create `debate_v3.py` (copy from `debate_v2.py`)
+- [x] Define/Implement Refinement Step:
+    - [x] Create `async def refine_with_debate_summary(...)` function (in `core/merge_logic.py` for now)
+    - [x] Design `REFINE_PROMPT_TEMPLATE` for integrating debate summary into baseline prose (in `utils/prompts.py`)
+    - [x] Implement LLM call within the refinement function
+- [x] Modify `debate_v3.py` Flow:
+    - [x] Call `refine_with_debate_summary` after summarization step
+    - [x] Pass refined answer to `judge_quality`
+    - [x] Update final answer selection logic
+- [ ] Write unit tests for refinement function and `debate_v3.py` flow
+- [x] Perform manual testing comparing V3 integrated output vs. baseline. 

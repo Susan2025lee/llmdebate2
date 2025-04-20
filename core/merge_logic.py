@@ -1,116 +1,188 @@
+import asyncio
+import json
 from typing import List, Dict, Optional
 from collections import Counter, defaultdict
 import statistics
 import logging
 
 from utils.models import Factor, AgentResponse
+# Import prompts from the central file
+from utils.prompts import MERGE_FACTORS_PROMPT, REFINE_PROMPT_TEMPLATE
 from rich.console import Console
-console = Console()
+# Assuming LLMInterface is correctly importable from the root or adjusted path
+from llm_interface import LLMInterface
 
-# Setup logger for this module
+console = Console()
 logger = logging.getLogger(__name__)
 
-def merge_factors(
+# --- LLM-based Merge Prompt Template --- 
+# Definition moved to utils/prompts.py
+
+# --- V3: Refinement Prompt Template --- 
+# Definition moved to utils/prompts.py
+
+async def merge_factors(
     final_responses: Dict[str, AgentResponse], 
-    min_endorsements: int = 2,
-    min_confidence: float = 4.0,
-    top_k: Optional[int] = None
+    question: str,
+    top_k: Optional[int] = 5 # Default top_k to 5
 ) -> List[Factor]:
     """
-    Merges factors from multiple agents based on endorsement count and mean confidence.
+    Merges factors from multiple agents using an LLM call for semantic synthesis and ranking.
 
     Args:
         final_responses: Dictionary mapping agent names to their final AgentResponse.
-        min_endorsements: Minimum number of agents required to endorse a factor.
-        min_confidence: Minimum mean confidence score required for a factor if it doesn't 
-                        meet the min_endorsements threshold.
-        top_k: If set, return only the top K ranked factors.
+        question: The original question being debated.
+        top_k: Return only the top K ranked synthesized factors.
 
     Returns:
-        A ranked list of merged Factor objects.
+        A list of synthesized Factor objects, ranked by the LLM.
     """
-    endorsement_counts = Counter()
-    confidence_scores = defaultdict(list)
-    justifications = defaultdict(list)
-    original_factors = defaultdict(list)
+    logger.info(f"Starting LLM-based factor merging for top {top_k} factors.")
 
-    # --- Step 1: Aggregate factors and stats --- 
+    # --- Step 1: Format Factors for Prompt --- 
+    formatted_factors_list = []
+    all_original_factors = [] # Keep track for debugging or potential future use
     for agent_name, response in final_responses.items():
-        unique_factors_this_agent = set() # Prevent agent from endorsing same factor multiple times
+        if not response.factors:
+            continue # Skip agents with no factors
+        agent_header = f"Factors from {agent_name}:"
+        formatted_factors_list.append(agent_header)
         for factor in response.factors:
-            normalized_name = factor.name.strip().lower()
-            if normalized_name in unique_factors_this_agent:
-                continue # Already counted this factor for this agent
-            unique_factors_this_agent.add(normalized_name)
-            
-            endorsement_counts[normalized_name] += 1
-            confidence_scores[normalized_name].append(factor.confidence)
-            justifications[normalized_name].append(f"({agent_name}): {factor.justification}")
-            original_factors[normalized_name].append(factor) # Keep original factor object
-
-    # --- Step 2: Calculate stats and filter --- 
-    merged_factors = []
-    for name, count in endorsement_counts.items():
-        mean_conf = statistics.mean(confidence_scores[name]) if confidence_scores[name] else 0
-        
-        # Apply filtering logic
-        if count >= min_endorsements or mean_conf >= min_confidence:
-            # Combine justifications or select the best one?
-            # For now, let's combine them, separated by newlines
-            combined_justification = "\n".join(justifications[name])
-            
-            # Create a new Factor object representing the merged consensus
-            merged_factor = Factor(
-                name=original_factors[name][0].name, # Use original casing from first instance
-                justification=combined_justification,
-                confidence=float(mean_conf) # Ensure mean confidence is explicitly assigned
+            all_original_factors.append(factor)
+            factor_str = (
+                f"  - Factor: \"{factor.name}\" (Confidence: {factor.confidence:.1f})\n"
+                f"    Justification: {factor.justification}"
             )
-            # Add endorsement count for sorting/ranking
-            setattr(merged_factor, 'endorsement_count', count) 
-            merged_factors.append(merged_factor)
+            formatted_factors_list.append(factor_str)
+        formatted_factors_list.append("") # Add a blank line between agents
+    
+    formatted_factors_text = "\n".join(formatted_factors_list).strip()
 
-    # --- Step 3: Rank factors --- 
-    # Sort primarily by endorsement count (desc), secondarily by mean confidence (desc)
-    merged_factors.sort(key=lambda f: (getattr(f, 'endorsement_count', 0), f.confidence), reverse=True)
+    if not formatted_factors_text:
+        logger.warning("No factors found in final responses to merge.")
+        return []
 
-    # --- Step 4: Trim to top K if specified --- 
-    if top_k is not None and len(merged_factors) > top_k:
-        merged_factors = merged_factors[:top_k]
+    # --- Step 2: Prepare and Call LLM --- 
+    # TODO: Consider which model to use for merging (config?) - Defaulting for now
+    #       Might need a higher capability model for good synthesis.
+    #       Using the default model configured in LLMInterface for now.
+    merge_llm = LLMInterface() # Uses default model from env/config
+
+    prompt = MERGE_FACTORS_PROMPT.format(
+        question=question,
+        top_k=top_k,
+        formatted_factors=formatted_factors_text
+    )
+    
+    logger.debug(f"Merge Prompt (first 500 chars):\n{prompt[:500]}...")
+    
+    # Assuming LLMInterface has an async generate_response or similar method
+    # If using generate_chat_response, adapt message format
+    try:
+        # Using generate_response as it's simpler for a single prompt->response task
+        raw_llm_response = await asyncio.to_thread(merge_llm.generate_response, prompt)
+        logger.debug(f"Raw Merge LLM Response:\n{raw_llm_response}")
+    except Exception as e:
+        logger.error(f"Error calling LLM for factor merging: {e}", exc_info=True)
+        console.print(f"[bold red]Error calling LLM for merging: {e}[/bold red]")
+        return [] # Return empty list on LLM error
+
+    # --- Step 3: Parse LLM Output --- 
+    merged_factors: List[Factor] = []
+    try:
+        # Basic parsing: Assume LLM returns just the JSON list
+        # More robust parsing might involve regex to find JSON block
+        parsed_json = json.loads(raw_llm_response)
         
-    logger.info(f"Selected {len(merged_factors)} factors after merge/filter/rank.")
-    # logger.debug(f"Merged Factors: {[f.name for f in merged_factors]}")
+        if not isinstance(parsed_json, list):
+            raise ValueError("LLM response is not a JSON list.")
 
-    # --- Added Print Statement ---
-    console.print("\n--- [bold cyan]Final Merged & Ranked Factors[/bold cyan] ---")
-    console.print(merged_factors)
-    console.print("--- End Final Merged & Ranked Factors ---\n")
-    # --- End Added Print Statement ---
+        for item in parsed_json:
+            if isinstance(item, dict) and 'name' in item and 'justification' in item and 'confidence' in item:
+                # Validate confidence format if necessary
+                try:
+                    confidence_val = float(item['confidence'])
+                except ValueError:
+                    logger.warning(f"Could not parse confidence '{item['confidence']}' as float for factor '{item['name']}'. Skipping.")
+                    continue
+                
+                merged_factors.append(Factor(
+                    name=str(item['name']),
+                    justification=str(item['justification']),
+                    confidence=confidence_val
+                ))
+            else:
+                logger.warning(f"Skipping invalid item in LLM JSON response: {item}")
+        
+        # Ensure we don't exceed top_k even if LLM returns more
+        if top_k is not None and len(merged_factors) > top_k:
+             logger.warning(f"LLM returned {len(merged_factors)} factors, trimming to top {top_k}.")
+             merged_factors = merged_factors[:top_k]
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response from LLM: {e}")
+        logger.error(f"LLM Response was: {raw_llm_response}")
+        console.print(f"[bold red]Error: Failed to parse merge response from LLM.[/bold red]")
+        # Optionally, try regex extraction here as a fallback
+        return [] # Return empty on parsing error
+    except Exception as e:
+        logger.error(f"Error processing LLM merge response: {e}", exc_info=True)
+        console.print(f"[bold red]Error: Unexpected issue processing merge response: {e}[/bold red]")
+        return []
+
+    logger.info(f"Successfully merged and parsed {len(merged_factors)} factors from LLM.")
+    console.print("\n--- [bold cyan]LLM Synthesized & Ranked Factors[/bold cyan] ---")
+    if merged_factors:
+        for factor in merged_factors:
+             console.print(f"- [bold magenta]{factor.name}[/bold magenta] (Confidence: {factor.confidence:.2f})")
+             console.print(f"  Justification: {factor.justification}") # Print justification too
+    else:
+        console.print("[yellow]LLM did not return any valid factors.[/yellow]")
+    console.print("--- End LLM Synthesized & Ranked Factors ---\n")
 
     return merged_factors
 
-# Example Usage (can be moved to tests later)
-# if __name__ == '__main__':
-#     f_a1 = Factor(name=" A ", justification="JA1", confidence=5)
-#     f_b1 = Factor(name="B", justification="JB1", confidence=3)
-#     f_c1 = Factor(name="C", justification="JC1", confidence=4)
-#     resp1 = AgentResponse(agent_name="Agent1", factors=[f_a1, f_b1, f_c1])
+async def refine_with_debate_summary(
+    baseline_prose: str,
+    debate_summary: str,
+    question: str
+) -> str:
+    """
+    Uses an LLM to integrate insights from a debate summary into an original baseline answer.
 
-#     f_a2 = Factor(name=" a ", justification="JA2", confidence=4)
-#     f_b2 = Factor(name="B", justification="JB2", confidence=5)
-#     f_d2 = Factor(name="D", justification="JD2", confidence=5)
-#     resp2 = AgentResponse(agent_name="Agent2", factors=[f_a2, f_b2, f_d2])
+    Args:
+        baseline_prose: The original prose answer generated by the anchor agent.
+        debate_summary: The prose summary generated from the merged debate factors.
+        question: The original question being debated.
 
-#     f_a3 = Factor(name="A", justification="JA3", confidence=3)
-#     f_e3 = Factor(name="E", justification="JE3", confidence=3) # Low confidence, low endorsement
-#     resp3 = AgentResponse(agent_name="Agent3", factors=[f_a3, f_e3])
+    Returns:
+        The refined prose answer, integrating baseline and debate insights.
+    """
+    logger.info("Starting V3 refinement: Integrating debate summary into baseline.")
     
-#     final_responses_example = {"Agent1": resp1, "Agent2": resp2, "Agent3": resp3}
+    # TODO: Consider which model to use for refinement (config?) - Defaulting for now
+    refine_llm = LLMInterface() # Uses default model from env/config
     
-#     merged = merge_factors(final_responses_example, top_k=3)
+    prompt = REFINE_PROMPT_TEMPLATE.format(
+        question=question,
+        baseline_prose=baseline_prose,
+        debate_summary=debate_summary
+    )
     
-#     print("\nMerged Factors:")
-#     for factor in merged:
-#         print(f"- {factor.name} (Endorsements: {getattr(factor, 'endorsement_count')}, Mean Confidence: {factor.confidence:.2f})")
-#         # print(f"  Justification: {factor.justification}")
+    logger.debug(f"Refinement Prompt (first 500 chars):\n{prompt[:500]}...")
+    
+    try:
+        refined_answer = await asyncio.to_thread(refine_llm.generate_response, prompt)
+        logger.debug(f"Raw Refinement LLM Response:\n{refined_answer}")
+        logger.info("Successfully generated refined answer.")
+        # Simple return for now, add validation/parsing if output format becomes complex
+        return refined_answer.strip()
+    except Exception as e:
+        logger.error(f"Error calling LLM for refinement: {e}", exc_info=True)
+        console.print(f"[bold red]Error calling LLM for refinement: {e}[/bold red]")
+        # Fallback: Return the original baseline if refinement fails?
+        # Or maybe the debate summary? Returning baseline seems safer.
+        console.print("[yellow]Refinement failed. Falling back to original baseline for this step.[/yellow]")
+        return baseline_prose
 
-# Expected output (approx): A, B, D (Factor C confidence is 4, Factor E endorsement=1, conf=3)
+# Remove old example usage if it exists
