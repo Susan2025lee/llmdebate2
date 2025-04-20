@@ -81,5 +81,31 @@ Run unit and smoke tests via `pytest`:
 pytest
 ```
 
+## (Optional) Web Interface
+- A browser‐based UI streams each debate step in real time, including human prompt when requested.
+
+### Running the Web UI
+1. Activate your virtual environment:
+   ```bash
+   source .venv/bin/activate
+   ```
+2. Start the Flask server:
+   ```bash
+   python app.py
+   ```
+3. Open your browser and go to `http://localhost:5000`.
+4. Enter your question and click **Run Debate**.
+• You will see live status updates, baseline, critique, merge, summary, refine, and judge results in the page.
+• When asked for feedback (a popup prompt), type your input and press Enter to continue.
+
+### Web Configuration Environment Variables
+- `WEB_MAX_ROUNDS` (default: 3)
+- `WEB_TOP_K`       (default: 5)
+- `FLASK_RUN_HOST`  (default: `127.0.0.1`)
+- `FLASK_RUN_PORT`  (default: `5000`)
+- `FLASK_DEBUG`     (default: `False`)  
+
+You can put these in your `.env` file to customize the web interface behavior.
+
 ## License
 This project is released under the MIT License. See `LICENSE` for details. 
