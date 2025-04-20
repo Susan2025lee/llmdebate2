@@ -5,7 +5,7 @@
 - [x] Setup CLI with `typer` and env loading
 - [x] Implement OpenAI (O4-mini) async wrapper
 - [ ] Implement Gemini 2.5 async wrapper (using direct API calls, reading GEMINI_API_KEY/GEMINI_MODEL from .env)
-- [ ] Implement Grok 3 async wrapper (skipped)
+- [ ] Implement Grok 3 async wrapper (`llm_clients/grok_client.py`) **(Skipped - Focus on O4-mini & Gemini)**
 - [x] Build and test baseline & parallel fan‑out logic (initial version with stubs/placeholders)
 - [ ] Write unit tests for LLM client wrappers
 - [x] Write unit tests for O4 LLM client wrapper (via LLMInterface)
@@ -90,4 +90,17 @@
     - [x] Pass refined answer to `judge_quality`
     - [x] Update final answer selection logic
 - [ ] Write unit tests for refinement function and `debate_v3.py` flow
-- [x] Perform manual testing comparing V3 integrated output vs. baseline. 
+- [x] Perform manual testing comparing V3 integrated output vs. baseline.
+
+## Milestone 6: Basic Web Interface (Flask - Planned)
+
+- [x] Add Flask dependency to `requirements.txt`
+- [x] Create `app.py` with basic Flask app structure
+- [x] Create `templates/` directory and `templates/index.html`
+- [x] Implement GET route in `app.py` to render `index.html`
+- [x] Implement POST route in `app.py`:
+    - [x] Get question from form
+    - [x] Adapt `debate_v3.run_debate_logic` to return final answer
+    - [x] Call adapted logic (using `asyncio.run` initially)
+    - [x] Render `index.html` with result
+- [x] Create basic HTML form and result display area in `index.html`

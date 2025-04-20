@@ -4,4 +4,8 @@ typer[all]
 rich
 pytest
 google-generativeai
-pytest-asyncio 
+pytest-asyncio
+Flask
+Flask-SocketIO
+python-socketio
+eventlet 

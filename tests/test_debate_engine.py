@@ -178,8 +178,7 @@ async def test_run_debate_rounds_human_feedback(mock_parse, mock_template, mock_
 
 # --- Test Cases for _parse_factor_list --- 
 
-# Generate JSON strings programmatically to ensure validity
-
+# Define test data needed for the original list parser tests
 def create_json_string(data) -> str:
     "Helper to create a valid JSON string from a Python list/dict."
     return json.dumps(data, indent=2)
@@ -303,9 +302,6 @@ Confidence: 3
 EMPTY_STRING = ""
 EMPTY_JSON_ARRAY = "[]"
 
-
-# --- Pytest Functions --- 
-
 @pytest.mark.parametrize(
     "input_text, expected_factors",
     [
@@ -352,7 +348,3 @@ def test_parse_factor_list(input_text, expected_factors):
         assert parsed.justification == expected.justification
         # Use pytest.approx for float comparison
         assert parsed.confidence == pytest.approx(expected.confidence)
-
-# Optional: Add specific tests if needed for more complex scenarios
-# def test_parse_factor_list_specific_case():
-#     # ...

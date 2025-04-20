@@ -11,15 +11,16 @@ A command-line proof-of-concept that validates a structured debate protocol amon
 
 ### System Approaches
 
-*   **Version 1 (`debate.py`):** The initial implementation focuses on structured data exchange. It prompts all agents for a *JSON list of factors* in the baseline step. The debate proceeds using these JSON factors, and the final merged summary (prose) is compared against the baseline agent's raw JSON factor list by the judge.
-*   **Version 2 (`debate_v2.py` - Planned):** A revised approach focused on maximizing final answer quality. It first generates a high-quality *prose* baseline answer from a primary "Anchor Agent". Other agents then *critique* this prose baseline in the first round, generating JSON factors to seed the debate. Subsequent rounds refine these factors. The judge compares the initial prose baseline against the final merged prose summary.
+*   **Version 1 (`debate.py`):** Focuses on structured data exchange (JSON factors) throughout.
+*   **Version 2 (`debate_v2.py`):** Generates a high-quality prose baseline, uses debate rounds to critique/refine factors, then synthesizes a summary from the top K debated factors. Judge compares baseline prose vs. final *summarized* debate factors.
+*   **Version 3 (`debate_v3.py` - Proposed):** Builds on V2. After synthesizing the top K debated factors into a summary, it uses a second LLM call to *integrate* that summary's insights back into the original prose baseline, aiming to preserve baseline detail while incorporating debate refinements. Judge compares baseline prose vs. this final *integrated* prose.
 
 ## 2. Objectives & Success Criteria
 | Objective                              | Success Criterion                            |
 |----------------------------------------|----------------------------------------------|
 | Validate debate workflow               | End-to-end debate completes without errors   |
 | Ensure answer ≥ baseline quality       | Judge agent approves merged answer ≥ baseline |
-|                                        | (V1: Prose Merged vs JSON Baseline; V2: Prose Merged vs Prose Baseline) |
+|                                        | (V1: Prose Merged vs JSON Baseline; V2: Prose Merged vs Prose Baseline; V3: Integrated Prose vs Prose Baseline) |
 | Human-in-the-loop integration          | User feedback incorporated between rounds     |
 | Core merge logic accuracy              | Consensus factors correctly identified       |
 | Time-to-PoC                            | ≤ 1 day developer effort                     |
@@ -35,12 +36,15 @@ A command-line proof-of-concept that validates a structured debate protocol amon
 2. **Baseline & Fan‑Out**: Query O4-mini, Gemini 2.5, Grok 3 in parallel for factor lists.
 3. **Debate Rounds**: Each agent critiques and revises in parallel; include human feedback.
 4. **Convergence Check**: Halt if changes fall below a threshold or after max rounds.
-5. **Merge Logic**: Aggregate factors by endorsement count and mean confidence. Enhancement planned to incorporate semantic similarity for improved synthesis.
-6. **Summarization**: Generate final prose answer from consensus factors.
-7. **Judge Quality Guard**: Compare merged vs. baseline; fallback if merged underperforms.
+5. **Merge Logic (V2/V3 Component)**: Aggregate factors using an LLM call to identify distinct concepts, synthesize representative factors, rank them, and return the top K. This synthesized result feeds the summarizer.
+6. **Summarization (V2/V3 Component)**: Generate final prose summary from consensus factors identified by the merge logic.
+7. **Refinement Logic (V3 Only)**: Use an LLM call to integrate the debate summary (from step 6) back into the original prose baseline, producing a refined final answer.
+8. **Judge Quality Guard**: Compare final answer vs. baseline; fallback if needed.
     *   *V1 Note: Compares final prose summary vs. baseline agent's raw JSON factor list.*
     *   *V2 Note: Compares final prose summary vs. initial high-quality prose baseline.*
-8. **Logging**: Persist full transcript and scores to JSON.
+    *   *V3 Note: Compares final *integrated* prose answer vs. initial high-quality prose baseline.*
+9. **Logging**: Persist full transcript and scores to JSON.
+10. **Web Interface (Basic)**: Provide a simple web UI (Flask) to input a question and display the final generated answer.
 
 ## 5. Non-Functional Requirements
 - **Simplicity**: Single script or minimal modules.

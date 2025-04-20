@@ -182,27 +182,25 @@ async def run_debate_logic(question: str, top_k: int, max_rounds: int, output: s
     ]
 
     # --- Merge Factors --- #
-    merged_factors = [] # Ensure variable exists
     if debate_history_obj:
         final_agent_responses = debate_history_obj[-1]
         console.print("\n[yellow]Merging final factors...[/yellow]")
-        merged_factors = merge_factors(
+        # The merge_factors function is now async and handles its own console output
+        merged_factors = await merge_factors(
             final_responses=final_agent_responses,
+            question=question,
             top_k=top_k # Pass the CLI arg
-            # min_endorsements and min_confidence use defaults
         )
-        console.print("\n[bold yellow][Merged Factors][/bold yellow]")
+        # Store merged factors in transcript (Factor objects to dicts)
         if merged_factors:
-            for factor in merged_factors:
-                endorsements = getattr(factor, 'endorsement_count', 'N/A')
-                console.print(f"- [bold magenta]{factor.name}[/bold magenta] (Endorsements: {endorsements}, Mean Confidence: {factor.confidence:.2f})")
-            # Store merged factors in transcript (Factor objects to dicts)
             transcript_data["merged_factors"] = [f.__dict__ for f in merged_factors]
         else:
-            console.print("[red]No factors met the merge criteria.[/red]")
+            # Handle case where merge returns empty (e.g., LLM error)
+            transcript_data["merged_factors"] = [] 
     else:
         console.print("\n[bold red]Error:[/bold red] Debate history is empty, cannot merge.")
-        # merged_factors already initialized
+        # merged_factors already initialized to []
+        transcript_data["merged_factors"] = []
 
     # --- Generate Summary --- #
     final_summary = "Summary could not be generated."

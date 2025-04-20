@@ -39,9 +39,6 @@ def _parse_factor_list(text: str) -> List[Factor]:
     
     if match:
         json_str = match.group(1)
-        # Optional: Log if we extracted from a larger string
-        # if len(json_str) < len(raw_text.strip()):
-        #     logger.debug(f"Extracted JSON substring: {json_str[:100]}... from raw text: {raw_text[:100]}...")
     else:
         logger.warning(f"Could not find JSON array structure `[...]` in response: {raw_text[:200]}...")
         return []

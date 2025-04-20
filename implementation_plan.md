@@ -37,19 +37,18 @@
   - Check for convergence (Δ threshold on confidences / factor sets).
 
 ## Milestone 3: Merge & Summarize
-- Implement merge logic:
-  ```python
-  # Basic approach: Count endorsements + average confidence
-  endorsements = Counter()
-  confidences = defaultdict(list)
-  for agent in agents:
-      for factor in agent.factors:
-          endorsements[factor.name] += 1
-          confidences[factor.name].append(factor.confidence)
-  # Filter and sort
-  ```
-- **Enhance merge logic**: Implement semantic clustering (e.g., using sentence embeddings) to group similar factors before ranking, improving synthesis quality.
-- Create summarization prompt using merged factors + justifications.
+- Implement **LLM-based merge logic** (`core/merge_logic.py`):
+    - Refactor `merge_factors` to be `async`.
+    - Design prompt instructing LLM (e.g., O4-mini via `LLMInterface`) to:
+        - Accept a list of factors from all agents.
+        - Group factors by semantic meaning.
+        - Synthesize a representative factor (name, justification, confidence) for each distinct group.
+        - Rank synthesized factors based on importance/support.
+        - Return the top `k` factors in a reliable JSON format.
+    - Implement logic to format input factors for the prompt.
+    - Implement LLM call using `LLMInterface`.
+    - Implement robust parsing for the LLM's JSON output.
+- Create summarization prompt using the LLM-merged factors.
 - Query summarizer LLM and print final prose answer.
 
 ## Milestone 4: Judge Agent Integration
@@ -96,4 +95,47 @@ This version aims to improve answer quality by generating a high-quality prose b
 6.  **Configuration:** Add option to select Anchor Agent (e.g., in `.env` or `config.json`).
 7.  **Testing:**
     *   Manual testing with rich prompts.
-    *   Update/add unit tests for the modified flow in `debate_v2.py`. 
+    *   Update/add unit tests for the modified flow in `debate_v2.py`.
+
+## Version 3 Implementation Plan (Integrated Refinement)
+
+This version builds on V2 by adding a dedicated step to integrate debate insights back into the original baseline, preserving detail while adding refinement.
+
+1.  **Setup:**
+    *   Create `debate_v3.py` (e.g., by copying `debate_v2.py`).
+    *   Ensure V2 components (prose baseline, critique seeding, debate rounds, LLM merge, summarization) are functional.
+2.  **Refinement Function (`core/refiner.py` or `core/merge_logic.py`):
+    *   Create `async def refine_with_debate_summary(baseline_prose: str, debate_summary: str, question: str) -> str`.
+    *   Design `REFINE_PROMPT_TEMPLATE`: Instruct LLM (e.g., O4-mini via `LLMInterface`) to enhance `baseline_prose` by integrating insights from `debate_summary`, preserving baseline structure/detail.
+    *   Implement LLM call within the function.
+3.  **Modify Main Flow (`debate_v3.py`):
+    *   After generating `final_summary` from merged factors, call `await refine_with_debate_summary()` passing the original `prose_baseline` and the `final_summary`.
+    *   Store the result as `refined_answer`.
+4.  **Update Judge Integration (`debate_v3.py`):
+    *   Modify the call to `judge_quality` to pass `merged_answer=refined_answer`.
+    *   Update final selection logic to use `refined_answer` if the judge approves it.
+5.  **Testing:**
+    *   Manual testing comparing `refined_answer` vs. `prose_baseline`.
+    *   Add/update unit tests for the new refinement function and modified `debate_v3.py` flow.
+
+## Milestone 6: Basic Web Interface (Flask)
+
+- **Dependencies:** Add `Flask` to `requirements.txt` and install.
+- **File Structure:**
+    - Create `app.py` at the project root.
+    - Create `templates/` directory.
+    - Create `templates/index.html`.
+- **Flask App (`app.py`):**
+    - Initialize Flask app.
+    - Define route (`/`) supporting GET and POST.
+    - GET handler: Render `index.html`.
+    - POST handler:
+        - Get `question` from form.
+        - Import `run_debate_logic` from `debate_v3.py`.
+        - **Adapt `run_debate_logic`**: Modify it (or create a wrapper) to return the final answer string instead of just printing/logging.
+        - Run the adapted logic (using `asyncio.run()` for initial simplicity).
+        - Render `index.html` passing the result back for display.
+- **HTML Template (`templates/index.html`):**
+    - Basic HTML structure.
+    - Form with `<textarea name="question">` and submit button.
+    - Display area for the result using Jinja2 (`{{ result }}`). 
