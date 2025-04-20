@@ -15,4 +15,5 @@
 | Output Styling    | `rich` for colored text and spinners                            |
 | Testing           | `pytest` for unit and smoke tests                              |
 | LLM Access        | All LLM calls go through `LLMInterface` (`src/core/llm_interface.py`) to handle proxy configuration and model-specific adaptations |
+| Factor Merging    | (Planned) Add `sentence-transformers` for semantic clustering   |
 ``` 

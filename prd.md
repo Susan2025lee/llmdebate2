@@ -9,11 +9,17 @@ A command-line proof-of-concept that validates a structured debate protocol amon
 - Summarize consensus into a final answer.
 - Guard quality with a judge agent.
 
+### System Approaches
+
+*   **Version 1 (`debate.py`):** The initial implementation focuses on structured data exchange. It prompts all agents for a *JSON list of factors* in the baseline step. The debate proceeds using these JSON factors, and the final merged summary (prose) is compared against the baseline agent's raw JSON factor list by the judge.
+*   **Version 2 (`debate_v2.py` - Planned):** A revised approach focused on maximizing final answer quality. It first generates a high-quality *prose* baseline answer from a primary "Anchor Agent". Other agents then *critique* this prose baseline in the first round, generating JSON factors to seed the debate. Subsequent rounds refine these factors. The judge compares the initial prose baseline against the final merged prose summary.
+
 ## 2. Objectives & Success Criteria
 | Objective                              | Success Criterion                            |
 |----------------------------------------|----------------------------------------------|
 | Validate debate workflow               | End-to-end debate completes without errors   |
 | Ensure answer ≥ baseline quality       | Judge agent approves merged answer ≥ baseline |
+|                                        | (V1: Prose Merged vs JSON Baseline; V2: Prose Merged vs Prose Baseline) |
 | Human-in-the-loop integration          | User feedback incorporated between rounds     |
 | Core merge logic accuracy              | Consensus factors correctly identified       |
 | Time-to-PoC                            | ≤ 1 day developer effort                     |
@@ -29,9 +35,11 @@ A command-line proof-of-concept that validates a structured debate protocol amon
 2. **Baseline & Fan‑Out**: Query O4-mini, Gemini 2.5, Grok 3 in parallel for factor lists.
 3. **Debate Rounds**: Each agent critiques and revises in parallel; include human feedback.
 4. **Convergence Check**: Halt if changes fall below a threshold or after max rounds.
-5. **Merge Logic**: Aggregate factors by endorsement count and mean confidence.
+5. **Merge Logic**: Aggregate factors by endorsement count and mean confidence. Enhancement planned to incorporate semantic similarity for improved synthesis.
 6. **Summarization**: Generate final prose answer from consensus factors.
 7. **Judge Quality Guard**: Compare merged vs. baseline; fallback if merged underperforms.
+    *   *V1 Note: Compares final prose summary vs. baseline agent's raw JSON factor list.*
+    *   *V2 Note: Compares final prose summary vs. initial high-quality prose baseline.*
 8. **Logging**: Persist full transcript and scores to JSON.
 
 ## 5. Non-Functional Requirements

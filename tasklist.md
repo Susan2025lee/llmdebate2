@@ -23,10 +23,12 @@
 - [x] Write unit tests for convergence detection logic (covered by debate loop tests)
 
 ## Milestone 3: Merge & Summarize
-- [x] Code merge logic (endorsement + confidence)
+- [x] Code merge logic (endorsement + confidence) - *Initial version*
+- [ ] Enhance merge logic with semantic clustering (using `sentence-transformers`)
 - [x] Create summarization prompt and integration (in core/summarizer.py)
 - [x] Test final summarization (Via smoke test)
-- [x] Write unit tests for merge logic calculations
+- [x] Write unit tests for merge logic calculations - *Covers initial version*
+- [ ] Write unit tests for semantic merge logic
 - [x] Write unit tests for summarization prompt assembly (in tests/test_summarizer.py)
 
 ## Milestone 4: Judge Agent Integration
@@ -55,4 +57,18 @@
 - [x] Implement JSON-based Factor Parsing in `_parse_factor_list` (`core/debate_engine.py`) - Replaced regex parsing
 - [x] Add Unit Tests for `_parse_factor_list` (`tests/test_debate_engine.py`)
 - [ ] Implement Factor Merging Logic (`core/merge_logic.py`)
-- [ ] Implement Final Summarization (`core/summarizer.py`) 
+- [ ] Implement Final Summarization (`core/summarizer.py`)
+
+## Version 2: Critique Prose Baseline (In Progress)
+
+- [x] Create `debate_v2.py` (copy from `debate.py`)
+- [x] Add new prompt templates to `utils/prompts.py` (`PROSE_BASELINE_GENERATION_TEMPLATE`, `CRITIQUE_PROSE_BASELINE_TEMPLATE`)
+- [x] Implement Anchor Agent configuration (reading `ANCHOR_AGENT_NAME` from `.env`)
+- [x] Modify baseline flow in `debate_v2.py`:
+    - [x] Add initial prose baseline generation step
+    - [x] Implement critique/factor generation step for Round 1 seeding
+    - [x] Update transcript logging
+- [ ] Verify/adjust debate loop logic in `core/debate_engine.py` if needed (e.g., round numbering) - *Deferred pending testing*
+- [x] Update judge integration in `debate_v2.py` (prose vs. prose comparison, fallback logic)
+- [ ] Add/update unit tests for `debate_v2.py` flow
+- [ ] Perform manual testing with rich prompts 
