@@ -92,6 +92,28 @@
 - [ ] Write unit tests for refinement function and `debate_v3.py` flow
 - [x] Perform manual testing comparing V3 integrated output vs. baseline.
 
+## Version 4: Parallel Baselines & Free-Form Debate (Planned)
+
+- [ ] Create `debate_v4.py` (e.g., copy `debate_v3.py`)
+- [ ] Create new core logic module (`core/debate_engine_v4.py`?)
+- [ ] Modify `debate_v4.py`: Implement parallel prose baseline generation (all agents)
+- [ ] Update transcript logging for V4 baselines
+- [ ] Define `FREEFORM_CRITIQUE_PROMPT_TEMPLATE` in `utils/prompts.py`
+- [ ] Define `FREEFORM_DEBATE_ROUND_PROMPT_TEMPLATE` in `utils/prompts.py` (for future multi-round)
+- [ ] Implement `run_freeform_critique_round` (e.g., in `core/debate_engine_v4.py`)
+- [ ] Implement `run_freeform_debate_round` (for future multi-round)
+- [ ] Modify `debate_v4.py`: Call critique round, remove old factor/merge/refine/summarize calls
+- [ ] Define `SYNTHESIS_PROMPT_TEMPLATE` in `utils/prompts.py`
+- [ ] Implement `synthesize_final_answer` function (e.g., in `core/synthesizer.py`)
+- [ ] Modify `debate_v4.py`: Call synthesis function to get final answer
+- [ ] Decide on V4 judge strategy and implement
+- [ ] Modify `app.py` to optionally call `debate_v4.py` logic
+- [ ] Add V4 progress event types to `app.py` callbacks
+- [ ] Update `index.html` JavaScript for V4 events
+- [ ] Update `index.html` HTML to display parallel baselines and free-form text
+- [ ] Write unit tests for V4 core logic (critique round, synthesis)
+- [ ] Perform extensive manual testing comparing V4 vs V3 outputs
+
 ## Milestone 6: Basic Web Interface (Flask - Planned)
 
 - [x] Add Flask dependency to `requirements.txt`

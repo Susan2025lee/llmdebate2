@@ -203,7 +203,8 @@ async def run_debate_logic(
             initial_responses=initial_responses,
             question=question,
             max_rounds=max_rounds,
-            human_feedback_callback=human_feedback_callback # Use the callback passed as argument
+            progress_callback=progress_callback, 
+            human_feedback_callback=human_feedback_callback 
         )
         report_progress(progress_callback, "status", "Debate rounds complete.", use_console=True)
     except Exception as e:

@@ -1,7 +1,7 @@
 import asyncio
 import re
 import json # <-- Added import
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Callable
 from rich.console import Console # Use Rich for printing
 from rich.progress import Progress, SpinnerColumn, TextColumn # Added import
 import logging
@@ -153,6 +153,7 @@ async def run_debate_rounds(
     initial_responses: Dict[str, AgentResponse],
     question: str,
     max_rounds: int,
+    progress_callback: Optional[Callable[[str, Any], None]],
     human_feedback_callback: Optional[callable] = None
 ) -> List[Dict[str, AgentResponse]]:
     """Orchestrates the debate rounds."""
@@ -244,11 +245,31 @@ async def run_debate_rounds(
                     agent_name=agent_name, 
                     factors=parsed_factors, 
                     raw_response=raw_response_text
-                    # Critique field is not parsed/used yet
                 )
 
         debate_history.append(next_round_responses)
         current_responses = next_round_responses
+
+        # --- CORRECTED: Report round results via the actual callback --- 
+        if progress_callback: # Check if the callback exists
+            serializable_responses = {
+                agent_name: {
+                    "agent_name": resp.agent_name,
+                    "factors": [f.__dict__ for f in resp.factors],
+                    "critique": resp.critique,
+                    "raw_response": resp.raw_response 
+                } for agent_name, resp in current_responses.items()
+            }
+            try:
+                # Call the passed-in progress_callback directly
+                progress_callback( 
+                    "debate_round_result", # update_type
+                    {"round": round_num, "results": serializable_responses} # data
+                )
+            except Exception as e:
+                 # Use the correct callback name in the error message
+                 logger.error(f"Error calling progress_callback in debate round {round_num}: {e}", exc_info=True)
+        # ----------------------------------------------------------
 
         # --- Convergence Check ---
         if round_num > 1: # Only check after the second round results are in

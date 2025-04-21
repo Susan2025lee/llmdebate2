@@ -26,46 +26,58 @@ Example format:
 CRITICAL: Output ONLY the JSON array. Do not include any introductory text, explanations, or markdown formatting like ```json before or after the JSON array.
 """
 
-# Refined prompt
+# REPLACE the existing critique prompt with the improved version
 CRITIQUE_PROMPT_TEMPLATE = """
 Context:
 Original Question: {question}
 
-Your previous factors/justifications (formatted as JSON):
+Your previous factors/justifications (Round N-1):
 {previous_factors}
 
-Other agents' most recent factors/justifications (formatted as JSON):
+Other agents' factors/justifications this round (Round N):
 {other_agents_factors}
 
-Human feedback (if any):
+Human feedback for this round (if any):
 {human_feedback}
 
-Instructions:
-Based on all the context above:
-1. Identify any high-impact factors currently missing from *your* list that others mentioned or that human feedback suggested.
-2. Flag any factors in *your* current list that seem weak, incorrect, or redundant based on others' points or human feedback.
-3. Revise *your* list of factors based on your critique.
+Instructions for Generating Your Response for Round N+1:
+You MUST perform the following steps:
 
-Output your revised list as a JSON array, where each object represents a factor and has the following keys:
-- "factor_name": A string containing the descriptive name of the factor.
-- "justification": A string containing 1-2 sentences explaining the factor's relevance.
-- "confidence": A number (integer or float) between 1 and 5 (inclusive), with 5 being the highest confidence.
+1.  **Critique Other Agents:**
+    *   Directly compare your previous factors with the factors presented by other agents this round.
+    *   For *each* other agent, identify at least one specific point of agreement (e.g., a factor you both identified with similar reasoning) AND one specific point of disagreement (e.g., a factor they included you think is wrong/irrelevant/redundant, a justification you disagree with, or a significantly different confidence score you want to challenge). Explain your reasoning clearly.
+    *   Identify the single strongest factor or justification presented by *any* other agent that you did not previously consider.
+
+2.  **Self-Correction:**
+    *   Based on the critiques from others (implicitly shown in their factor lists) and the human feedback, identify any factors in *your* previous list that now seem weak, incorrect, redundant, or less important. Explain why.
+
+3.  **Synthesize & Revise Your Factors:**
+    *   Create your revised list of factors for the next round.
+    *   Your justifications should reflect the critique process. If you adopt a factor from another agent, mention it. If you modify a factor based on disagreement, explain the change. If you drop a factor, explain why based on step 2.
+
+Output Format:
+Your final output for this round MUST be ONLY a single JSON array containing your revised factors. Each object must have keys "factor_name", "justification", and "confidence" (float 1.0-5.0).
 
 Example format:
 [
   {{
     "factor_name": "Revised Factor A",
-    "justification": "Justification for revised factor A.",
-    "confidence": 5
+    "justification": "Initially similar to Agent X's factor, but refined confidence based on their justification regarding Y.",
+    "confidence": 4.5
   }},
   {{
-    "factor_name": "New Factor B",
-    "justification": "Justification for new factor B based on critique.",
-    "confidence": 4
+    "factor_name": "New Factor B (from Agent Z)",
+    "justification": "Adopted from Agent Z as it highlights the crucial aspect of [detail], which my previous list missed.",
+    "confidence": 4.0
+  }},
+  {{
+    "factor_name": "Disagreeing Factor C",
+    "justification": "Retained despite Agent X flagging it; their critique overlooks the importance of [counter-argument].",
+    "confidence": 5.0
   }}
 ]
 
-CRITICAL: Output ONLY the JSON array. Do not include any introductory text, explanations, code block markers (like ```json), or summaries before or after the JSON array.
+CRITICAL: Output ONLY the JSON array `[...]`. Do not include the critique text (steps 1 & 2), introductory sentences, explanations, or markdown formatting like ```json before or after the JSON array itself. The critique happens internally to produce the final JSON.
 """
 
 # Note: This prompt is defined in core/merge_logic.py, not here.

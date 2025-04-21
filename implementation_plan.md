@@ -118,6 +118,46 @@ This version builds on V2 by adding a dedicated step to integrate debate insight
     *   Manual testing comparing `refined_answer` vs. `prose_baseline`.
     *   Add/update unit tests for the new refinement function and modified `debate_v3.py` flow.
 
+## Version 4 Implementation Plan (Parallel Baselines & Free-Form Debate)
+
+This version represents a significant architectural shift, prioritizing diverse perspectives and detailed discussion over structured factor extraction during the debate.
+
+1.  **Setup & Preservation:**
+    *   Create `debate_v4.py` by copying `debate_v3.py` to preserve the V3 working version.
+    *   Create a new core logic module if needed (e.g., `core/debate_engine_v4.py`) to house the new debate flow, keeping `core/debate_engine.py` untouched for V3.
+2.  **Parallel Prose Baseline Generation (`debate_v4.py`):**
+    *   Modify the initial step to call *all* configured agents (O4-mini, Gemini, Grok if present) using the existing `PROSE_BASELINE_GENERATION_TEMPLATE`.
+    *   Store these multiple prose baselines (e.g., in a dictionary `initial_baselines: Dict[str, str]`).
+    *   Update transcript logging.
+3.  **Free-Form Critique/Debate Prompts (`utils/prompts.py`):**
+    *   Define `FREEFORM_CRITIQUE_PROMPT_TEMPLATE`: Takes the agent's own baseline and all other baselines. Instructs the agent to compare, critique, and state its core arguments in *prose*.
+    *   Define `FREEFORM_DEBATE_ROUND_PROMPT_TEMPLATE`: Takes the full text history from the previous free-form round. Instructs the agent to respond, critique, and refine its arguments in *prose*.
+4.  **Free-Form Debate Logic (`core/debate_engine_v4.py` or similar):**
+    *   Implement `async def run_freeform_critique_round(initial_baselines: Dict[str, str]) -> Dict[str, str]`: Calls all agents with the `FREEFORM_CRITIQUE_PROMPT_TEMPLATE`.
+    *   Implement `async def run_freeform_debate_round(previous_round_texts: Dict[str, str]) -> Dict[str, str]`: Calls all agents with `FREEFORM_DEBATE_ROUND_PROMPT_TEMPLATE`. (Start with only implementing/calling the critique round).
+    *   Update `debate_v4.py` to call these new functions.
+    *   Remove calls to factor parsing (`_parse_factor_list`), existing `run_debate_rounds`, factor merging (`merge_factors`), summarization (`generate_summary`), and refinement (`refine_with_debate_summary`).
+5.  **Synthesis Step (`core/synthesizer.py` or similar):**
+    *   Create `async def synthesize_final_answer(question: str, initial_baselines: Dict[str, str], debate_texts: List[Dict[str, str]]) -> str`.
+    *   Design `SYNTHESIS_PROMPT_TEMPLATE`: Instructs a high-capability LLM (e.g., O4-mini or judge model) to read the question, all baselines, and all free-form debate text, then synthesize a single, comprehensive prose answer.
+    *   Implement the LLM call within this function.
+    *   Update `debate_v4.py` to call this function after the free-form round(s) to get the `final_synthesized_answer`.
+6.  **Judge Integration (V4 Adaptation):**
+    *   Decide how the judge should operate in V4. Options:
+        *   Compare `final_synthesized_answer` vs. one of the `initial_baselines` (e.g., the anchor agent's or a randomly chosen one).
+        *   Compare `final_synthesized_answer` vs. an average/representative baseline (harder to define).
+        *   Judge the `final_synthesized_answer` on its own merits using a different rubric/prompt.
+    *   Modify the judge call in `debate_v4.py` accordingly.
+7.  **Web UI Update (`templates/index.html`, `app.py`):**
+    *   Modify `app.py` to call the V4 debate logic (`debate_v4.py`).
+    *   Add new progress callback event types for parallel baselines and free-form debate rounds.
+    *   Update `index.html` JavaScript to handle these new event types.
+    *   Add HTML sections to display multiple baselines and the free-form text responses.
+    *   Ensure the final synthesized answer is displayed.
+8.  **Testing:**
+    *   Extensive manual testing comparing V4 outputs against V3 outputs for quality, detail, and perspective diversity.
+    *   Unit tests for new core logic functions (free-form rounds, synthesizer).
+
 ## Milestone 6: Basic Web Interface (Flask)
 
 - **Dependencies:** Add `Flask` to `requirements.txt` and install.

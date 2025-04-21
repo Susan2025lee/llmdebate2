@@ -44,6 +44,11 @@
             <h2>Critique Results:</h2>
             <div id="critique-output" class="result-box">Waiting for critique...</div>
 
+            <!-- ADDED: Section for Debate Round Results -->
+            <h2>Debate Rounds:</h2>
+            <div id="debate-rounds-output" class="result-box">Waiting for debate rounds...</div>
+            <!-- END ADDED -->
+
             <h2>Merge Result:</h2>
             <div id="merge-output" class="result-box">Waiting for merge...</div>
 
@@ -77,6 +82,7 @@
         const refineOutput = document.getElementById('refine-output');
         const judgeOutput = document.getElementById('judge-output');
         const finalAnswerOutput = document.getElementById('final-answer-output');
+        const debateRoundsOutput = document.getElementById('debate-rounds-output');
 
         form.addEventListener('submit', function(event) {
             event.preventDefault();
@@ -95,6 +101,7 @@
             refineOutput.textContent = 'Waiting for refinement...';
             judgeOutput.textContent = 'Waiting for judge...';
             finalAnswerOutput.textContent = 'Waiting for final answer...';
+            debateRoundsOutput.textContent = 'Waiting for debate rounds...';
             loader.style.display = 'inline-block';
             submitButton.disabled = true;
 
@@ -124,13 +131,36 @@
             evtSource.addEventListener('critique_complete', e => {
                 console.debug('SSE critique_complete:', e.data);
                 const data = JSON.parse(e.data);
-                let html = '<ul>';
+                let html = '';
                 for (let agent in data) {
-                    const count = data[agent].factors ? data[agent].factors.length : 0;
-                    html += `<li><b>${agent}:</b> ${count} factors</li>`;
+                    const rawResponse = data[agent].raw_response || (data[agent].error ? `Error: ${data[agent].error}` : 'No response received');
+                    html += `<div><b>${agent}:</b><pre>${escapeHtml(rawResponse)}</pre></div>`;
                 }
-                html += '</ul>';
                 critiqueOutput.innerHTML = html;
+            });
+            evtSource.addEventListener('debate_round_result', e => {
+                console.debug('SSE debate_round_result:', e.data);
+                const roundData = JSON.parse(e.data);
+                const roundNum = roundData.round;
+                const results = roundData.results;
+
+                // Create HTML for this round
+                let roundHtml = `<h3>Round ${roundNum}</h3>`;
+                for (let agent in results) {
+                    const agentData = results[agent];
+                    // Display raw response for now, adjust as needed
+                    const rawResponse = agentData.raw_response || (agentData.error ? `Error: ${agentData.error}` : 'No response');
+                    roundHtml += `<div><b>${agent}:</b><pre>${escapeHtml(rawResponse)}</pre></div>`;
+                }
+
+                // Clear the 'Waiting...' message on the first round result or append otherwise
+                if (debateRoundsOutput.textContent === 'Waiting for debate rounds...') {
+                    debateRoundsOutput.innerHTML = roundHtml;
+                } else {
+                    debateRoundsOutput.innerHTML += roundHtml;
+                }
+                // Optional: Auto-scroll
+                // debateRoundsOutput.scrollTop = debateRoundsOutput.scrollHeight;
             });
             evtSource.addEventListener('merge_result', e => {
                 console.debug('SSE merge_result:', e.data);
@@ -176,6 +206,16 @@
                 evtSource.close();
             });
         });
+
+        // Add helper function to escape HTML characters for safe display in <pre>
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
     </script>
 </body>
 </html> 
