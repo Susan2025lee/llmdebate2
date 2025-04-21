@@ -94,24 +94,24 @@
 
 ## Version 4: Parallel Baselines & Free-Form Debate (Planned)
 
-- [ ] Create `debate_v4.py` (e.g., copy `debate_v3.py`)
-- [ ] Create new core logic module (`core/debate_engine_v4.py`?)
-- [ ] Modify `debate_v4.py`: Implement parallel prose baseline generation (all agents)
-- [ ] Update transcript logging for V4 baselines
-- [ ] Define `FREEFORM_CRITIQUE_PROMPT_TEMPLATE` in `utils/prompts.py`
+- [x] Create `debate_v4.py` (e.g., copy `debate_v3.py`)
+- [x] Create new core logic module (`core/debate_engine_v4.py`?)
+- [x] Modify `debate_v4.py`: Implement parallel prose baseline generation (all agents)
+- [x] Update transcript logging for V4 baselines
+- [x] Define `FREEFORM_CRITIQUE_PROMPT_TEMPLATE` in `utils/prompts.py`
 - [ ] Define `FREEFORM_DEBATE_ROUND_PROMPT_TEMPLATE` in `utils/prompts.py` (for future multi-round)
-- [ ] Implement `run_freeform_critique_round` (e.g., in `core/debate_engine_v4.py`)
+- [x] Implement `run_freeform_critique_round` (e.g., in `core/debate_engine_v4.py`)
 - [ ] Implement `run_freeform_debate_round` (for future multi-round)
-- [ ] Modify `debate_v4.py`: Call critique round, remove old factor/merge/refine/summarize calls
-- [ ] Define `SYNTHESIS_PROMPT_TEMPLATE` in `utils/prompts.py`
-- [ ] Implement `synthesize_final_answer` function (e.g., in `core/synthesizer.py`)
-- [ ] Modify `debate_v4.py`: Call synthesis function to get final answer
-- [ ] Decide on V4 judge strategy and implement
-- [ ] Modify `app.py` to optionally call `debate_v4.py` logic
-- [ ] Add V4 progress event types to `app.py` callbacks
-- [ ] Update `index.html` JavaScript for V4 events
-- [ ] Update `index.html` HTML to display parallel baselines and free-form text
-- [ ] Write unit tests for V4 core logic (critique round, synthesis)
+- [x] Modify `debate_v4.py`: Call critique round, remove old factor/merge/refine/summarize calls
+- [x] Define `SYNTHESIS_PROMPT_TEMPLATE` in `utils/prompts.py`
+- [x] Implement `synthesize_final_answer` function (e.g., in `core/synthesizer.py`)
+- [x] Modify `debate_v4.py`: Call synthesis function to get final answer
+- [x] Decide on V4 judge strategy and implement
+- [x] Modify `app.py` to optionally call `debate_v4.py` logic
+- [x] Add V4 progress event types to `app.py` callbacks
+- [x] Update `index.html` JavaScript for V4 events
+- [x] Update `index.html` HTML to display parallel baselines and free-form text
+- [x] Write unit tests for V4 core logic (critique round, synthesis)
 - [ ] Perform extensive manual testing comparing V4 vs V3 outputs
 
 ## Milestone 6: Basic Web Interface (Flask - Planned)
@@ -126,3 +126,26 @@
     - [x] Call adapted logic (using `asyncio.run` initially)
     - [x] Render `index.html` with result
 - [x] Create basic HTML form and result display area in `index.html`
+
+## Additional Tasks
+- [x] Implement basic V1 debate logic (`debate.py`)
+- [x] Implement V2 logic with prose baseline (`debate_v2.py`)
+- [x] Implement V3 logic with baseline refinement (`debate_v3.py`)
+- [x] Add Judge Agent (`judge/`)
+- [x] Add CLI interfaces for V1, V2, V3
+- [x] Develop initial Web UI (`app.py`, `templates/index.html`)
+- [x] Integrate V1, V2, V3 into Web UI with SSE
+- [x] Implement V4 core logic (`debate_v4.py`, `core/debate_engine_v4.py`)
+  - [x] Parallel prose baselines
+  - [x] Single round free-form critique
+  - [x] Synthesizer (V4 Default)
+  - [x] Alternative Synthesizer (V3 Refine Style)
+- [x] Integrate V4 into Web UI
+  - [x] Modify `app.py` to optionally call `debate_v4.py` logic (using Socket.IO)
+  - [x] Add V4 progress event types to `app.py` callbacks (using Socket.IO)
+  - [x] Update `index.html` JavaScript for V4 events & Socket.IO
+  - [x] Update `index.html` HTML to display V4 results (parallel baselines, free-form text, synthesizer choice)
+- [x] Write unit tests for V4 core logic (critique round, synthesis)
+- [ ] Perform extensive manual testing comparing V4 vs V3 outputs (CLI and Web UI)
+- [x] Create `agent_interaction.md` documentation.
+- [x] Finalize Documentation (`README.md`, etc.)

@@ -1,127 +1,176 @@
 import pytest
-import sys
-import os
-from typing import List, Dict, Optional
+import asyncio
+from unittest.mock import patch, AsyncMock, MagicMock, call
+import json # Add json import
 
-# Add project root to sys.path to allow importing 'core' and 'utils'
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Modules to test
-from core.merge_logic import merge_factors
 from utils.models import Factor, AgentResponse
+# Adjust path if merge_factors was moved or needs different imports
+from core.merge_logic import merge_factors # Assuming merge_factors is still here
+from llm_interface import LLMInterface # For patching
+from utils.prompts import MERGE_FACTORS_PROMPT # For checking prompt format
 
 # --- Test Data Setup --- 
 
 # Basic factors
-F_A = Factor(name="A", justification="JA", confidence=5)
-F_A2 = Factor(name="A", justification="JA", confidence=5) # Distinct object for Agent 2
-F_A3 = Factor(name="A", justification="JA", confidence=3) # Distinct object for Agent 3 (lower conf)
-F_B = Factor(name="B", justification="JB", confidence=4)
-F_C = Factor(name="C", justification="JC", confidence=3)
-F_D = Factor(name="D", justification="JD", confidence=5) # High confidence, low endorsement
-F_E = Factor(name="E", justification="JE", confidence=2) # Low confidence, low endorsement
+F_A = Factor(name="A", justification="Justification A", confidence=4)
+F_B = Factor(name="B", justification="Justification B", confidence=5)
+F_C = Factor(name="C", justification="Justification C", confidence=3)
+F_D = Factor(name="D", justification="Justification D", confidence=5)
 
 # Agent responses for testing
-RESP_1 = AgentResponse(agent_name="Agent1", factors=[F_A, F_B, F_C])
-RESP_2 = AgentResponse(agent_name="Agent2", factors=[F_A2, F_B, F_D]) # A, B endorsed; D has high conf
-RESP_3 = AgentResponse(agent_name="Agent3", factors=[F_A3, F_E])       # A endorsed; E is weak
+RESP_1 = AgentResponse(agent_name="Agent1", factors=[F_A, F_B, F_D])
+RESP_2 = AgentResponse(agent_name="Agent2", factors=[F_A, F_C])
 
-FINAL_RESPONSES_BASIC = {"Agent1": RESP_1, "Agent2": RESP_2, "Agent3": RESP_3}
+FINAL_RESPONSES_BASIC = {"Agent1": RESP_1, "Agent2": RESP_2}
 
 # --- Test Cases --- 
 
-def test_merge_basic_endorsement_and_confidence():
-    """ Test standard merge logic: A, B endorsed >= 2; D conf >= 4. """
-    merged = merge_factors(FINAL_RESPONSES_BASIC)
-    merged_names = [f.name for f in merged]
-    
-    # Expected: A (3 endorsements), B (2 endorsements), D (1 endorsement, conf=5 >= 4)
+# Use pytest.mark.asyncio for async functions
+@pytest.mark.asyncio
+@patch('core.merge_logic.LLMInterface') # Patch LLMInterface where it's used
+async def test_merge_llm_basic(MockLLMInterface):
+    """ Test LLM-based merge logic with a successful mock response. """
+    # Arrange
+    mock_question = "Test question for merge?"
+    mock_top_k = 3
+    # Mock the LLM response JSON string
+    mock_llm_json_output = json.dumps([
+        {"name": "Synthesized A", "justification": "Merged Justification A", "confidence": 4.5},
+        {"name": "Synthesized B", "justification": "Merged Justification B", "confidence": 5.0},
+        {"name": "Synthesized D", "justification": "Merged Justification D", "confidence": 5.0}
+    ])
+    mock_llm_instance = MagicMock(spec=LLMInterface)
+    mock_llm_instance.generate_response.return_value = mock_llm_json_output
+    MockLLMInterface.return_value = mock_llm_instance
+
+    # Act
+    merged = await merge_factors(
+        final_responses=FINAL_RESPONSES_BASIC,
+        question=mock_question,
+        top_k=mock_top_k
+    )
+
+    # Assert
     assert len(merged) == 3
-    assert merged_names == ["A", "B", "D"] # Check ranking order (A>B>D)
-    
-    # Check details of A
-    factor_a = next(f for f in merged if f.name == "A")
-    assert getattr(factor_a, 'endorsement_count') == 3
-    assert factor_a.confidence == pytest.approx((5 + 5 + 3) / 3) # Mean confidence
-    assert "(Agent1): JA" in factor_a.justification
-    assert "(Agent2): JA" in factor_a.justification
-    assert "(Agent3): JA" in factor_a.justification
-    
-    # Check details of B
-    factor_b = next(f for f in merged if f.name == "B")
-    assert getattr(factor_b, 'endorsement_count') == 2
-    assert factor_b.confidence == pytest.approx((4 + 4) / 2)
-    assert "(Agent1): JB" in factor_b.justification
-    assert "(Agent2): JB" in factor_b.justification
-    
-    # Check details of D
-    factor_d = next(f for f in merged if f.name == "D")
-    assert getattr(factor_d, 'endorsement_count') == 1
-    assert factor_d.confidence == pytest.approx(5)
-    assert "(Agent2): JD" in factor_d.justification
+    assert merged[0].name == "Synthesized A"
+    assert merged[0].confidence == 4.5
+    assert merged[1].name == "Synthesized B"
+    assert merged[2].name == "Synthesized D"
 
-def test_merge_top_k_filtering():
-    """ Test that top_k correctly limits the number of results. """
-    merged = merge_factors(FINAL_RESPONSES_BASIC, top_k=2)
-    merged_names = [f.name for f in merged]
+    # Check that LLMInterface was initialized and called
+    MockLLMInterface.assert_called_once()
+    mock_llm_instance.generate_response.assert_called_once()
     
-    # Expected: A, B (top 2 ranked)
-    assert len(merged) == 2
-    assert merged_names == ["A", "B"]
+    # Optionally check the prompt format
+    call_args, _ = mock_llm_instance.generate_response.call_args
+    prompt_arg = call_args[0]
+    assert mock_question in prompt_arg
+    assert f"top {mock_top_k}" in prompt_arg
+    assert "Factors from Agent1:" in prompt_arg
+    assert "Factors from Agent2:" in prompt_arg
+    assert F_A.name in prompt_arg
+    assert F_C.name in prompt_arg
 
-def test_merge_stricter_thresholds():
-    """ Test with higher thresholds, only A should pass. """
-    merged = merge_factors(FINAL_RESPONSES_BASIC, min_endorsements=3, min_confidence=4.5)
-    merged_names = [f.name for f in merged]
-    
-    # Expected: A (endorsement >= 3) and D (confidence >= 4.5)
-    assert len(merged) == 2
-    assert sorted(merged_names) == sorted(["A", "D"])
+@pytest.mark.asyncio
+@patch('core.merge_logic.LLMInterface')
+async def test_merge_llm_top_k_trimming(MockLLMInterface):
+    """ Test that merge_factors trims results if LLM returns more than top_k. """
+    # Arrange
+    mock_question = "Test question for merge?"
+    mock_top_k = 2 # Ask for top 2
+    # Mock LLM returning 3 factors
+    mock_llm_json_output = json.dumps([
+        {"name": "Factor 1", "justification": "J1", "confidence": 5.0},
+        {"name": "Factor 2", "justification": "J2", "confidence": 4.0},
+        {"name": "Factor 3", "justification": "J3", "confidence": 3.0}
+    ])
+    mock_llm_instance = MagicMock(spec=LLMInterface)
+    mock_llm_instance.generate_response.return_value = mock_llm_json_output
+    MockLLMInterface.return_value = mock_llm_instance
 
-def test_merge_case_insensitivity_and_whitespace():
-    """ Test that factors with different casing/whitespace are merged correctly. """
-    f_a_lower = Factor(name=" a ", justification="JA_lower", confidence=4)
-    f_b_space = Factor(name="B  ", justification="JB_space", confidence=5)
-    
-    resp_mixed = AgentResponse(agent_name="AgentMix", factors=[f_a_lower, f_b_space])
-    final_responses_mixed = {"Agent1": RESP_1, "AgentMix": resp_mixed} # A endorsed, B endorsed
-    
-    merged = merge_factors(final_responses_mixed)
-    merged_names = [f.name for f in merged]
-    
-    assert len(merged) == 2 # A and B should be merged
-    assert "A" in merged_names
-    assert "B" in merged_names
-    
-    factor_a = next(f for f in merged if f.name == "A")
-    assert getattr(factor_a, 'endorsement_count') == 2
-    assert "JA" in factor_a.justification
-    assert "JA_lower" in factor_a.justification
-    
-    factor_b = next(f for f in merged if f.name == "B")
-    assert getattr(factor_b, 'endorsement_count') == 2
-    assert "JB" in factor_b.justification
-    assert "JB_space" in factor_b.justification
+    # Act
+    merged = await merge_factors(
+        final_responses=FINAL_RESPONSES_BASIC,
+        question=mock_question,
+        top_k=mock_top_k
+    )
 
-def test_merge_no_responses():
-    """ Test merging with an empty input dictionary. """
-    merged = merge_factors({}) 
-    assert len(merged) == 0
+    # Assert
+    assert len(merged) == mock_top_k # Should be trimmed to 2
+    assert merged[0].name == "Factor 1"
+    assert merged[1].name == "Factor 2"
 
-def test_merge_empty_factors():
-    """ Test merging when agents return no factors. """
+@pytest.mark.asyncio
+@patch('core.merge_logic.LLMInterface')
+async def test_merge_llm_json_parse_error(MockLLMInterface):
+    """ Test handling of invalid JSON from the LLM. """
+    # Arrange
+    mock_question = "Test question for merge?"
+    mock_llm_bad_json = 'This is not JSON [{"name": "Bad"}]'
+    mock_llm_instance = MagicMock(spec=LLMInterface)
+    mock_llm_instance.generate_response.return_value = mock_llm_bad_json
+    MockLLMInterface.return_value = mock_llm_instance
+
+    # Act
+    merged = await merge_factors(
+        final_responses=FINAL_RESPONSES_BASIC,
+        question=mock_question,
+        top_k=5
+    )
+
+    # Assert
+    assert merged == [] # Should return empty list on parse error
+
+@pytest.mark.asyncio
+@patch('core.merge_logic.LLMInterface')
+async def test_merge_llm_api_error(MockLLMInterface):
+    """ Test handling of an exception during the LLM API call. """
+    # Arrange
+    mock_question = "Test question for merge?"
+    mock_llm_instance = MagicMock(spec=LLMInterface)
+    mock_llm_instance.generate_response.side_effect = Exception("API Failure")
+    MockLLMInterface.return_value = mock_llm_instance
+
+    # Act
+    merged = await merge_factors(
+        final_responses=FINAL_RESPONSES_BASIC,
+        question=mock_question,
+        top_k=5
+    )
+
+    # Assert
+    assert merged == [] # Should return empty list on API error
+
+@pytest.mark.asyncio
+@patch('core.merge_logic.LLMInterface')
+async def test_merge_no_input_factors(MockLLMInterface):
+    """ Test merging when the input responses contain no factors. """
+    # Arrange
+    mock_question = "Test question for merge?"
     resp_empty1 = AgentResponse(agent_name="Empty1", factors=[])
     resp_empty2 = AgentResponse(agent_name="Empty2", factors=[])
-    merged = merge_factors({"E1": resp_empty1, "E2": resp_empty2})
-    assert len(merged) == 0
+    empty_responses = {"E1": resp_empty1, "E2": resp_empty2}
+    mock_llm_instance = MagicMock(spec=LLMInterface) # Mock instance needed for patch
+    MockLLMInterface.return_value = mock_llm_instance
 
-def test_merge_no_consensus():
-    """ Test merging when no factors meet the criteria. """
-    f_x = Factor(name="X", justification="JX", confidence=1)
-    f_y = Factor(name="Y", justification="JY", confidence=2)
-    resp_weak1 = AgentResponse(agent_name="Weak1", factors=[f_x])
-    resp_weak2 = AgentResponse(agent_name="Weak2", factors=[f_y])
-    merged = merge_factors({"W1": resp_weak1, "W2": resp_weak2})
-    assert len(merged) == 0 
+    # Act
+    merged = await merge_factors(
+        final_responses=empty_responses,
+        question=mock_question,
+        top_k=5
+    )
+
+    # Assert
+    assert merged == [] # Should return empty list
+    # Crucially, the LLM should NOT have been called
+    mock_llm_instance.generate_response.assert_not_called()
+
+# Remove old algorithmic tests or adapt them significantly if needed.
+# The following tests are removed as they tested the old non-LLM logic:
+# - test_merge_basic_endorsement_and_confidence
+# - test_merge_top_k_filtering (replaced with LLM version)
+# - test_merge_stricter_thresholds 
+# - test_merge_case_insensitivity_and_whitespace
+# - test_merge_no_responses
+# - test_merge_empty_factors (replaced with LLM version)
+# - test_merge_no_consensus

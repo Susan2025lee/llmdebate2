@@ -3,7 +3,7 @@ import re
 from typing import Dict, Tuple
 import logging
 
-from utils.prompts import JUDGE_PROMPT_TEMPLATE
+from utils.prompts import JUDGE_PROMPT_TEMPLATE, JUDGE_V4_PROMPT_TEMPLATE
 # Use the default O4 client for judging for now
 from llm_clients.o4_client import query_o4
 from rich.console import Console # Use Rich for printing
@@ -136,6 +136,92 @@ async def judge_quality(
     # --- End Added Print Statement ---
 
     return decision, ratings, raw_judge_response
+
+# Example (for testing structure)
+# async def main_test():
+#     q = "What is the best language?"
+#     base = "Python is simple."
+#     merged = "Python is simple and versatile."
+#     
+#     # Mock query_o4 if needed for standalone test
+#     decision, ratings, raw = await judge_quality(base, merged, q)
+#     print(f"\nDecision: {decision}")
+#     print(f"Ratings: {ratings}")
+
+# if __name__ == "__main__":
+#     asyncio.run(main_test()) 
+
+# --- V4 Judge Logic --- 
+
+def _parse_judge_v4_decision(text: str) -> Tuple[str, str]:
+    """Parses the V4 judge output (Accept/Reject and optional reasoning)."""
+    decision = "Error"
+    reasoning = ""
+    decision_match = re.search(r"Overall Decision:\s*\[?(Accept|Reject)\]?", text, re.IGNORECASE | re.MULTILINE)
+    if decision_match:
+        decision = decision_match.group(1).capitalize()
+    else:
+        logger.warning(f"Could not parse V4 Judge decision from: {text[:200]}...")
+        decision = "Error: Cannot Parse Decision" # More specific error
+        
+    reasoning_match = re.search(r"Reasoning:\s*(.*)", text, re.IGNORECASE | re.MULTILINE)
+    if reasoning_match:
+        reasoning = reasoning_match.group(1).strip()
+        
+    return decision, reasoning
+
+async def judge_quality_v4(
+    synthesized_answer: str, 
+    question: str
+) -> Tuple[str, str, str]: # Returns: decision, reasoning, raw_response
+    """
+    Uses an LLM for an intrinsic quality check of the V4 synthesized answer.
+
+    Args:
+        synthesized_answer: The final answer produced by the V4 synthesis step.
+        question: The original user question.
+
+    Returns:
+        A tuple containing:
+        - decision (str): "Accept" or "Reject" (or "Error...").
+        - reasoning (str): Optional reasoning provided by the judge.
+        - raw_judge_response (str): The raw text output from the judge LLM.
+    """
+    if not synthesized_answer:
+        return "Error: Missing Answer", "", "Synthesized answer was empty."
+        
+    prompt = JUDGE_V4_PROMPT_TEMPLATE.format(
+        question=question,
+        synthesized_answer=synthesized_answer
+    )
+    
+    logger.info("Calling V4 Judge Agent...")
+    # logger.debug(f"V4 Judge Prompt:\n{prompt[:500]}...")
+
+    raw_judge_response = "Error: Judge LLM query failed."
+    decision = "Error"
+    reasoning = ""
+    
+    try:
+        # Assuming O4 is suitable for judging V4 as well
+        raw_judge_response = await query_o4(prompt)
+        logger.debug(f"V4 Judge Agent Raw Response:\n{raw_judge_response}")
+        console.print("[bold white][V4 Judge Agent Raw Response][/bold white]")
+        console.print(raw_judge_response)
+        
+        decision, reasoning = _parse_judge_v4_decision(raw_judge_response)
+        logger.info(f"V4 Judge Parsed Decision: {decision}, Reasoning: {reasoning}")
+        console.print(f"[bold cyan][V4 Judge Parsed Decision]:[/bold cyan] {decision}")
+        if reasoning:
+             console.print(f"[bold cyan][V4 Judge Reasoning]:[/bold cyan] {reasoning}")
+            
+    except Exception as e:
+        logger.error("Error during V4 judge query.", exc_info=True)
+        raw_judge_response = f"Error: Failed to get V4 judge response. {e}"
+        decision = "Error: LLM Call Failed"
+        reasoning = str(e)
+
+    return decision, reasoning, raw_judge_response
 
 # Example (for testing structure)
 # async def main_test():

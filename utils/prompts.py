@@ -227,3 +227,91 @@ Output **only** the final refined prose answer. Do not include introductory phra
 
 # Optional: Could be used for the anchor agent's self-critique, or reuse the main critique prompt.
 # SELF_CRITIQUE_PROSE_BASELINE_TEMPLATE = CRITIQUE_PROSE_BASELINE_TEMPLATE 
+
+# --- V4 Free-Form Critique Prompt ---
+FREEFORM_CRITIQUE_PROMPT_TEMPLATE = """
+Context:
+Original Question: {question}
+
+Your Initial Baseline Answer:
+```
+{your_baseline}
+```
+
+Other Agents' Initial Baseline Answers:
+{other_baselines_formatted}
+
+Your Task (Round 1 Critique):
+Critically evaluate the different approaches taken in the baseline answers provided above. Consider the following:
+
+1.  **Comparison:** How does your baseline compare to the others in terms of scope, key arguments, and proposed solutions or factors?
+2.  **Strengths:** What are the strongest points or unique insights presented in the *other* agents' baselines that you find compelling or complementary to your own?
+3.  **Weaknesses/Disagreements:** What are the main weaknesses, omissions, or points of disagreement you identify in the *other* agents' baselines? Be specific.
+4.  **Refined Stance:** Based on this cross-evaluation, briefly reiterate or refine your core argument or perspective on the original question.
+
+Output Format:
+Provide your critique and refined stance as clear, structured prose. Use headings or bullet points if helpful. Do NOT output JSON.
+"""
+
+# --- V4 Free-Form Debate Round Prompt (Placeholder) ---
+# TODO: Define this prompt for subsequent free-form rounds if implementing multi-round V4 debate.
+FREEFORM_DEBATE_ROUND_PROMPT_TEMPLATE = """(Placeholder)"""
+
+# --- V4 Synthesis Prompt --- 
+SYNTHESIS_PROMPT_TEMPLATE = """
+You are an expert AI tasked with synthesizing a final, comprehensive answer based on a multi-agent discussion. You will receive the original question, several initial baseline answers generated independently by different AI agents, and the subsequent free-form critique/debate text from those agents.
+
+Your Goal: Produce the best possible single prose answer to the original question, leveraging the diverse perspectives, critiques, and arguments presented in the provided materials.
+
+Input Materials:
+
+1.  **Original Question:** {question}
+
+2.  **Initial Baseline Answers:**
+{initial_baselines_formatted}
+
+3.  **Free-Form Critique/Debate Text (Round 1):**
+{critique_texts_formatted}
+
+Your Task:
+1.  **Understand the Landscape:** Carefully read and analyze all provided baselines and the critique texts. Identify the core themes, key points of agreement, significant disagreements, unique perspectives, and strongest arguments.
+2.  **Synthesize Holistically:** Construct a single, coherent, and well-structured prose answer that addresses the original question comprehensively.
+3.  **Incorporate Diversity:** Integrate the most valuable insights and strongest arguments from *all* agents, not just one. Where agents disagreed, represent the different viewpoints fairly or synthesize a more nuanced position if possible.
+4.  **Prioritize Quality & Detail:** Aim for accuracy, completeness, clarity, and depth. Retain important details, examples, or evidence mentioned in the baselines or critiques. Do not oversimplify.
+5.  **Structure:** Organize the final answer logically. Use paragraphs effectively.
+
+Output Format:
+Output ONLY the final synthesized prose answer. Do not include introductory phrases like "Here is the synthesized answer:", summaries of the input, or meta-commentary on the process.
+"""
+
+# --- V4 Intrinsic Judge Prompt ---
+JUDGE_V4_PROMPT_TEMPLATE = """
+Evaluate the quality of the following answer in response to the question: "{question}"
+
+Synthesized Answer:
+{synthesized_answer}
+
+Instructions:
+Assess the answer based on the following criteria:
+
+1.  **Relevance:** Does the answer directly and fully address the original question?
+2.  **Completeness:** Does the answer seem comprehensive, covering the likely key facets of the topic?
+3.  **Accuracy:** Does the information presented appear factually accurate and logically sound?
+4.  **Clarity:** Is the answer well-structured, clearly written, and easy to understand?
+
+Overall Decision:
+Based on your assessment, decide whether the Synthesized Answer is acceptable.
+Choose one: [Accept / Reject]
+
+Reasoning (Optional):
+[Provide a brief justification for your decision, especially if rejecting]
+
+Output Format:
+Return ONLY the Overall Decision line and the optional Reasoning line.
+Example 1 (Accept):
+Overall Decision: Accept
+
+Example 2 (Reject):
+Overall Decision: Reject
+Reasoning: The answer failed to address the core economic factors mentioned in the question.
+"""

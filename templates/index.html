@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>LLM Debate System</title>
+    <!-- Include Socket.IO Client Library (Removed integrity/crossorigin) -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 2em; line-height: 1.6; }
         .container { max-width: 800px; margin: auto; padding: 1em; border: 1px solid #ccc; border-radius: 5px; }
@@ -30,192 +32,365 @@
         <form id="debate-form">
             <label for="question">Enter your debate question:</label>
             <textarea id="question" name="question" rows="3" required>{{ request.args.get('question', '') }}</textarea>
-            <button type="submit" id="submit-button">Run Debate <span class="loader" id="loader"></span></button>
+            
+            <!-- ADDED: Version Selection -->
+            <div style="margin-bottom: 1em;">
+                <label for="version">Debate Version:</label>
+                <div id="version-select">
+                    <input type="radio" id="v3" name="debate_version" value="v3" checked onchange="toggleResultViews(); toggleV4Options();">
+                    <label for="v3">V3</label>
+                    <input type="radio" id="v4" name="debate_version" value="v4" onchange="toggleResultViews(); toggleV4Options();">
+                    <label for="v4">V4</label>
+                </div>
+
+                <!-- V4 Specific Options (Initially Hidden) -->
+                <div id="v4-options" style="display: none; margin-top: 10px;">
+                    <label for="synthesizer">Synthesizer Type:</label>
+                    <div id="synthesizer-select">
+                        <input type="radio" id="synth-v4" name="synthesizer_type" value="v4_default" checked>
+                        <label for="synth-v4">V4 Default (Synthesize Baselines + Critiques)</label>
+                        <br>
+                        <input type="radio" id="synth-v3-refine" name="synthesizer_type" value="v3_refine">
+                        <label for="synth-v3-refine">V3 Refine Style (Refine O4-mini Baseline with Critiques)</label>
+                    </div>
+                 </div>
+            </div>
+            <!-- END ADDED -->
+
+            <button type="button" onclick="startDebate()" id="start-debate-btn">Start Debate</button>
         </form>
 
         <div class="output-area" id="output-area">
             <div class="status-log" id="status-log"></div>
             
             <div id="error-message" class="error"></div>
-            
-            <h2>Baseline Result:</h2>
-            <div id="baseline-output" class="result-box">Waiting for baseline...</div>
 
-            <h2>Critique Results:</h2>
-            <div id="critique-output" class="result-box">Waiting for critique...</div>
+            <!-- V3 Specific Results -->
+            <div id="v3-results">
+                <h2>Baseline Result:</h2>
+                <div id="v3-baseline-output" class="result-box">Waiting for baseline...</div>
 
-            <!-- ADDED: Section for Debate Round Results -->
-            <h2>Debate Rounds:</h2>
-            <div id="debate-rounds-output" class="result-box">Waiting for debate rounds...</div>
-            <!-- END ADDED -->
+                <h2>Critique Results:</h2>
+                <div id="v3-critique-results" class="result-box">Waiting for critique...</div>
 
-            <h2>Merge Result:</h2>
-            <div id="merge-output" class="result-box">Waiting for merge...</div>
+                <h2>Debate Rounds:</h2>
+                <div id="v3-debate-rounds-output" class="result-box">Waiting for debate rounds...</div>
 
-            <h2>Summary Result:</h2>
-            <div id="summary-output" class="result-box">Waiting for summary...</div>
+                <h2>Merge Result:</h2>
+                <div id="v3-merge-output" class="result-box">Waiting for merge...</div>
 
-            <h2>Refined Answer:</h2>
-            <div id="refine-output" class="result-box">Waiting for refinement...</div>
+                <h2>Summary Result:</h2>
+                <div id="v3-summary-output" class="result-box">Waiting for summary...</div>
 
-            <h2>Judge Result:</h2>
-            <div id="judge-output" class="result-box">Waiting for judge...</div>
-            
-            <h2>Final Answer:</h2>
-            <div id="final-answer-output" class="result-box">Waiting for final answer...</div>
+                <h2>Refined Answer:</h2>
+                <div id="v3-refine-output" class="result-box">Waiting for refinement...</div>
+            </div>
+
+            <!-- V4 Specific Results -->
+            <div id="v4-results">
+                <h2>Parallel Baselines:</h2>
+                <div id="v4-parallel-baselines-output" class="result-box">Waiting for parallel baselines...</div>
+
+                <h2>Free-Form Critique (Round 1):</h2>
+                <div id="v4-freeform-critique-output" class="result-box">Waiting for free-form critique...</div>
+                <h2>Synthesized Answer (V4):</h2>
+                <div id="v4-synthesized-answer-output" class="result-box">Waiting for synthesized answer...</div>
+            </div>
+
+            <!-- Common Results -->
+            <div id="common-results">
+                <h2>Judge Result:</h2>
+                <div id="judge-results-output" class="result-box">Waiting for judge...</div>
+                
+                <h2>Final Answer:</h2>
+                <div id="final-answer-output" class="result-box">Waiting for final answer...</div>
+            </div>
         </div>
 
     </div>
 
     <!-- Use Server-Sent Events for streaming progress -->
     <script>
-        const form = document.getElementById('debate-form');
-        const questionInput = document.getElementById('question');
-        const submitButton = document.getElementById('submit-button');
-        const loader = document.getElementById('loader');
-        const statusLog = document.getElementById('status-log');
-        const errorMessage = document.getElementById('error-message');
-        const baselineOutput = document.getElementById('baseline-output');
-        const critiqueOutput = document.getElementById('critique-output');
-        const mergeOutput = document.getElementById('merge-output');
-        const summaryOutput = document.getElementById('summary-output');
-        const refineOutput = document.getElementById('refine-output');
-        const judgeOutput = document.getElementById('judge-output');
-        const finalAnswerOutput = document.getElementById('final-answer-output');
-        const debateRoundsOutput = document.getElementById('debate-rounds-output');
+        // Declare variables that will hold element references
+        let socket;
+        let errorMessage, v3ResultsDiv, v4ResultsDiv, commonResultsDiv, startDebateBtn;
 
-        form.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const question = questionInput.value.trim();
+        // --- UI Update Functions ---
+        function updateProgress(areaId, message) {
+            const element = document.getElementById(areaId);
+            if (element) {
+                // Simple text update for now, can be enhanced
+                element.innerHTML = `<div class="result-box"><pre>${escapeHtml(message)}</pre></div>`;
+            }
+        }
+
+        function clearResults() {
+             // Clear V3 results (Using CORRECTED IDs)
+            document.getElementById('v3-baseline-output').innerHTML = 'Waiting for baseline...';
+            document.getElementById('v3-critique-results').innerHTML = 'Waiting for critique...';
+            document.getElementById('v3-debate-rounds-output').innerHTML = 'Waiting for debate...';
+            document.getElementById('v3-merge-output').innerHTML = 'Waiting for merge...';
+            document.getElementById('v3-summary-output').innerHTML = 'Waiting for summary...';
+            document.getElementById('v3-refine-output').innerHTML = 'Waiting for refinement...';
+            // Clear V4 results (Using CORRECTED IDs)
+            document.getElementById('v4-parallel-baselines-output').innerHTML = 'Waiting for parallel baselines...';
+            document.getElementById('v4-freeform-critique-output').innerHTML = 'Waiting for free-form critique...';
+            document.getElementById('v4-synthesized-answer-output').innerHTML = 'Waiting for synthesized answer...'; // Added ID for clearing
+            // Clear common results (Using CORRECTED IDs)
+            document.getElementById('judge-results-output').innerHTML = 'Waiting for judge...';
+            document.getElementById('final-answer-output').innerHTML = 'Waiting for final answer...';
+        }
+
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') {
+                 console.warn("escapeHtml called with non-string:", unsafe);
+                 try {
+                    // Attempt to stringify objects/arrays for display
+                    unsafe = JSON.stringify(unsafe, null, 2);
+                 } catch (e) {
+                     unsafe = String(unsafe); // Fallback to String conversion
+                 }
+            }
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // --- Socket.IO Event Handlers ---
+        function connectWebSocket() {
+            // Initialize socket connection here, now that 'io' is defined
+            socket = io(); 
+
+            socket.on('connect', () => {
+                console.log('Socket.IO connected');
+                errorMessage.textContent = ''; // Clear error on successful connection
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Socket.IO disconnected');
+                errorMessage.textContent = 'Connection lost. Please refresh.';
+                startDebateBtn.disabled = false;
+            });
+
+            socket.on('connect_error', (err) => {
+                 console.error('Socket.IO connection error:', err);
+                 errorMessage.textContent = 'Failed to connect to the server. Please ensure it is running and refresh.';
+                 startDebateBtn.disabled = false;
+            });
+
+            // Generic status updates
+            socket.on('status', (data) => {
+                console.log('Status:', data);
+                // Could update a general status area if needed
+                // updateProgress('status-area', data); 
+            });
+
+            // Error handling
+            socket.on('error', (data) => {
+                console.error('Error from backend:', data);
+                let errorText = 'An unknown error occurred.';
+                if (typeof data === 'string') {
+                    errorText = data;
+                } else if (data && data.error) {
+                    errorText = data.error;
+                } else {
+                    try {
+                         errorText = JSON.stringify(data);
+                    } catch (e) { /* Ignore */ }
+                }
+                errorMessage.textContent = `Error: ${errorText}`;
+                startDebateBtn.disabled = false; // Re-enable button on error
+            });
+
+             // Handle specific V3 event types (Using CORRECTED IDs)
+            socket.on('baseline_output', (data) => updateProgress('v3-baseline-output', data));
+            socket.on('critique_results', (data) => updateProgress('v3-critique-results', data));
+            socket.on('debate_round', (data) => updateProgress('v3-debate-rounds-output', data));
+            socket.on('merge_results', (data) => updateProgress('v3-merge-output', data));
+            socket.on('summary_results', (data) => updateProgress('v3-summary-output', data));
+            socket.on('refined_answer', (data) => updateProgress('v3-refine-output', data));
+
+            // Handle specific V4 event types (Using CORRECTED IDs)
+            socket.on('parallel_baselines', (data) => {
+                console.log('parallel_baselines event received:', data);
+                const targetDiv = document.getElementById('v4-parallel-baselines-output');
+                if (targetDiv) {
+                    const agentName = data.agent_name || 'Unknown Agent';
+                    const baselineText = data.baseline_text || '[No text received]';
+                    const html = `<div class="result-box"><b>${escapeHtml(agentName)}:</b><pre>${escapeHtml(baselineText)}</pre></div>`;
+                    // Clear "Waiting..." on first result, then append
+                    if (targetDiv.innerHTML.includes('Waiting for parallel baselines...')) {
+                        targetDiv.innerHTML = html;
+                    } else {
+                        targetDiv.innerHTML += html;
+                    }
+                }
+            });
+            socket.on('freeform_critique', (data) => {
+                console.log('freeform_critique event received:', data);
+                const targetDiv = document.getElementById('v4-freeform-critique-output');
+                 if (targetDiv) {
+                    const agentName = data.agent_name || 'Unknown Agent';
+                    const critiqueText = data.critique_text || '[No text received]';
+                    const html = `<div class="result-box"><b>${escapeHtml(agentName)}:</b><pre>${escapeHtml(critiqueText)}</pre></div>`;
+                    // Clear "Waiting..." on first result, then append
+                    if (targetDiv.innerHTML.includes('Waiting for free-form critique...')) {
+                        targetDiv.innerHTML = html;
+                    } else {
+                        targetDiv.innerHTML += html;
+                    }
+                }
+            });
+            socket.on('synthesized_answer', (data) => updateProgress('v4-synthesized-answer-output', data)); // Using CORRECTED ID
+
+            // Handle common event types (Using CORRECTED IDs)
+            socket.on('judge_results', (data) => {
+                console.log('judge_results event received:', data);
+                const targetDiv = document.getElementById('judge-results-output');
+                 if (targetDiv) {
+                    let html = '<div class="result-box">';
+                    html += `<p><b>Decision:</b> ${escapeHtml(data.decision || 'N/A')}</p>`;
+                    if (data.ratings) {
+                        html += `<p><b>Ratings:</b>`;
+                        for (const key in data.ratings) {
+                            html += ` ${escapeHtml(key)}=${escapeHtml(data.ratings[key])};`;
+                        }
+                        html += `</p>`;
+                    }
+                    if (data.raw_output) {
+                         html += `<p><b>Reasoning:</b><pre>${escapeHtml(data.raw_output)}</pre></p>`;
+                    }
+                    html += '</div>';
+                    targetDiv.innerHTML = html; // Replace "Waiting..."
+                }
+            });
+            socket.on('final_answer', (data) => {
+                updateProgress('final-answer-output', data);
+                startDebateBtn.disabled = false; // Re-enable button on completion
+            });
+            
+            socket.on('complete', (data) => {
+                console.log('Debate complete:', data);
+                // Can add a final status message if needed
+                startDebateBtn.disabled = false; // Re-enable button
+            });
+
+        }
+
+        // --- Control Functions ---
+        function toggleResultViews() {
+            // console.log("toggleResultViews() called"); 
+            const selectedVersion = document.querySelector('input[name="debate_version"]:checked').value;
+            // console.log("Selected Version:", selectedVersion); 
+            // console.log("Common Results Div:", commonResultsDiv); // Uses outer scope variable
+            
+            v3ResultsDiv.style.display = selectedVersion === 'v3' ? 'block' : 'none';
+            v4ResultsDiv.style.display = selectedVersion === 'v4' ? 'block' : 'none';
+            
+            if (commonResultsDiv) { 
+                 commonResultsDiv.style.display = 'block'; 
+            } else {
+                // console.error("Could not find element with id='common-results'"); 
+            }
+        }
+
+        function toggleV4Options() {
+            // console.log("toggleV4Options() called");
+            const v4Radio = document.getElementById('v4');
+            const v4OptionsDiv = document.getElementById('v4-options');
+            // console.log("V4 Radio Button:", v4Radio);
+            // console.log("V4 Options Div:", v4OptionsDiv);
+
+            if (v4Radio && v4OptionsDiv) {
+                 const v4Selected = v4Radio.checked;
+                // console.log("Is V4 selected?", v4Selected);
+                 v4OptionsDiv.style.display = v4Selected ? 'block' : 'none';
+            } else {
+                 // console.error("Could not find v4 radio or v4-options div");
+            }
+        }
+
+        function startDebate() {
+            const question = document.getElementById('question').value;
+            const selectedVersion = document.querySelector('input[name="debate_version"]:checked').value;
+            let synthesizerType = null;
+
             if (!question) {
-                errorMessage.textContent = 'Please enter a question.';
+                alert('Please enter a question.');
                 return;
             }
-            // Reset UI
+
+            // Reset UI immediately
             errorMessage.textContent = '';
-            statusLog.innerHTML = '';
-            baselineOutput.textContent = 'Waiting for baseline...';
-            critiqueOutput.textContent = 'Waiting for critique...';
-            mergeOutput.textContent = 'Waiting for merge...';
-            summaryOutput.textContent = 'Waiting for summary...';
-            refineOutput.textContent = 'Waiting for refinement...';
-            judgeOutput.textContent = 'Waiting for judge...';
-            finalAnswerOutput.textContent = 'Waiting for final answer...';
-            debateRoundsOutput.textContent = 'Waiting for debate rounds...';
-            loader.style.display = 'inline-block';
-            submitButton.disabled = true;
+            clearResults();
+            toggleResultViews(); // Ensure correct view is visible
+            startDebateBtn.disabled = true; // Disable button during debate
 
-            const evtSource = new EventSource(`/debate?question=${encodeURIComponent(question)}`);
-            // Debug: log every message if needed
-            evtSource.onmessage = e => console.debug('SSE onmessage:', e);
+            // Get synthesizer type if V4 is selected
+            if (selectedVersion === 'v4') {
+                 synthesizerType = document.querySelector('input[name="synthesizer_type"]:checked').value;
+            }
 
-            evtSource.addEventListener('status', e => {
-                console.debug('SSE status:', e.data);
-                const msg = JSON.parse(e.data);
-                const p = document.createElement('p'); p.textContent = msg;
-                statusLog.appendChild(p);
-                statusLog.scrollTop = statusLog.scrollHeight;
-            });
-            // Handle human feedback requests
-            evtSource.addEventListener('feedback_request', e => {
-                const promptText = JSON.parse(e.data);
-                // Prompt the user for input
-                const userFeedback = window.prompt(promptText, '');
-                // Send the feedback back to the server
-                fetch(`/debate/feedback?feedback=${encodeURIComponent(userFeedback || '')}`);
-            });
-            evtSource.addEventListener('baseline_result', e => {
-                console.debug('SSE baseline_result:', e.data);
-                baselineOutput.textContent = JSON.parse(e.data);
-            });
-            evtSource.addEventListener('critique_complete', e => {
-                console.debug('SSE critique_complete:', e.data);
-                const data = JSON.parse(e.data);
-                let html = '';
-                for (let agent in data) {
-                    const rawResponse = data[agent].raw_response || (data[agent].error ? `Error: ${data[agent].error}` : 'No response received');
-                    html += `<div><b>${agent}:</b><pre>${escapeHtml(rawResponse)}</pre></div>`;
+            // console.log(`Starting ${selectedVersion} debate for: ${question}`);
+            // if (synthesizerType) {
+            //     console.log(`Using synthesizer: ${synthesizerType}`);
+            // }
+
+            // Prepare data for the backend POST request
+            const postData = {
+                question: question,
+                version: selectedVersion
+            };
+            if (selectedVersion === 'v4' && synthesizerType) {
+                postData.synthesizer_type = synthesizerType;
+            }
+
+            // Send request to start the debate (backend uses Socket.IO for updates)
+            fetch('/start_debate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(postData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // If the initial POST fails, show error
+                    return response.json().then(errData => {
+                        throw new Error(errData.error || `HTTP error ${response.status}`);
+                    });
                 }
-                critiqueOutput.innerHTML = html;
+                return response.json(); // Contains success message like {'message': 'Debate started...'} 
+            })
+            .then(data => {
+                // console.log('Start debate response:', data.message); 
+                // No UI updates here - wait for Socket.IO messages
+            })
+            .catch(error => {
+                console.error('Error starting debate:', error);
+                errorMessage.textContent = `Error starting debate: ${error.message}`;
+                startDebateBtn.disabled = false; // Re-enable button on initial failure
             });
-            evtSource.addEventListener('debate_round_result', e => {
-                console.debug('SSE debate_round_result:', e.data);
-                const roundData = JSON.parse(e.data);
-                const roundNum = roundData.round;
-                const results = roundData.results;
+        }
 
-                // Create HTML for this round
-                let roundHtml = `<h3>Round ${roundNum}</h3>`;
-                for (let agent in results) {
-                    const agentData = results[agent];
-                    // Display raw response for now, adjust as needed
-                    const rawResponse = agentData.raw_response || (agentData.error ? `Error: ${agentData.error}` : 'No response');
-                    roundHtml += `<div><b>${agent}:</b><pre>${escapeHtml(rawResponse)}</pre></div>`;
-                }
-
-                // Clear the 'Waiting...' message on the first round result or append otherwise
-                if (debateRoundsOutput.textContent === 'Waiting for debate rounds...') {
-                    debateRoundsOutput.innerHTML = roundHtml;
-                } else {
-                    debateRoundsOutput.innerHTML += roundHtml;
-                }
-                // Optional: Auto-scroll
-                // debateRoundsOutput.scrollTop = debateRoundsOutput.scrollHeight;
-            });
-            evtSource.addEventListener('merge_result', e => {
-                console.debug('SSE merge_result:', e.data);
-                const factors = JSON.parse(e.data);
-                let html = '<ul>';
-                factors.forEach(f => {
-                    html += `<li><b>${f.name}</b> (Conf: ${f.confidence.toFixed(2)})</li>`;
-                });
-                html += '</ul>';
-                mergeOutput.innerHTML = html;
-            });
-            evtSource.addEventListener('summary_result', e => {
-                console.debug('SSE summary_result:', e.data);
-                summaryOutput.textContent = JSON.parse(e.data);
-            });
-            evtSource.addEventListener('refine_result', e => {
-                console.debug('SSE refine_result:', e.data);
-                refineOutput.textContent = JSON.parse(e.data);
-            });
-            evtSource.addEventListener('judge_result', e => {
-                console.debug('SSE judge_result:', e.data);
-                const d = JSON.parse(e.data);
-                let html = `<p><b>Decision:</b> ${d.decision}</p>`;
-                if (d.ratings) html += `<p>Ratings: Base=${d.ratings.baseline}, Merged=${d.ratings.merged}</p>`;
-                judgeOutput.innerHTML = html;
-            });
-            evtSource.addEventListener('final_answer', e => {
-                console.debug('SSE final_answer:', e.data);
-                finalAnswerOutput.textContent = JSON.parse(e.data);
-            });
-            evtSource.addEventListener('error', e => {
-                console.debug('SSE error event:', e.data);
-                const err = JSON.parse(e.data || '{}');
-                errorMessage.textContent = err.error || 'Server error';
-                loader.style.display = 'none';
-                submitButton.disabled = false;
-                evtSource.close();
-            });
-            evtSource.addEventListener('complete', () => {
-                console.debug('SSE complete event');
-                loader.style.display = 'none';
-                submitButton.disabled = false;
-                evtSource.close();
-            });
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Assign element references AFTER the DOM is loaded
+            errorMessage = document.getElementById('error-message');
+            v3ResultsDiv = document.getElementById('v3-results');
+            v4ResultsDiv = document.getElementById('v4-results');
+            commonResultsDiv = document.getElementById('common-results');
+            startDebateBtn = document.getElementById('start-debate-btn');
+            
+            // Now connect WebSocket and setup initial view states
+            connectWebSocket(); // Setup Socket.IO listeners and initialize socket
+            toggleResultViews(); // Initial view setup
+            toggleV4Options(); // Initial V4 options visibility setup
         });
 
-        // Add helper function to escape HTML characters for safe display in <pre>
-        function escapeHtml(unsafe) {
-            return unsafe
-                 .replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-        }
     </script>
 </body>
 </html> 
